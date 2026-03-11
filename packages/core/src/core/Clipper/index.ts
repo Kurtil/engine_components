@@ -25,11 +25,10 @@ export * from "./src";
 export class Clipper
   extends Component
   implements
-    Createable,
-    Disposable,
-    Hideable,
-    Configurable<ClipperConfigManager, ClipperConfig>
-{
+  Createable,
+  Disposable,
+  Hideable,
+  Configurable<ClipperConfigManager, ClipperConfig> {
   /**
    * A unique identifier for the component.
    * This UUID is used to register the component within the Components system.
@@ -151,7 +150,7 @@ export class Clipper
   /** {@link Component.enabled} */
   set enabled(state: boolean) {
     this._enabled = state;
-    this.onStateChanged.trigger(["enabled"])
+    this.onStateChanged.trigger(["enabled"]);
     // for (const [_, plane] of this.list) {
     //   plane.enabled = state;
     // }
@@ -169,7 +168,7 @@ export class Clipper
     for (const [_, plane] of this.list) {
       plane.visible = state;
     }
-    this.onStateChanged.trigger(["visibility"])
+    this.onStateChanged.trigger(["visibility"]);
   }
 
   /** The material of the clipping plane representation. */
@@ -183,7 +182,7 @@ export class Clipper
     for (const [_, plane] of this.list) {
       plane.planeMaterial = material;
     }
-    this.onStateChanged.trigger(["material"])
+    this.onStateChanged.trigger(["material"]);
   }
 
   /** The size of the geometric representation of the clippings planes. */
@@ -197,26 +196,12 @@ export class Clipper
     for (const [_, plane] of this.list) {
       plane.size = size;
     }
-    this.onStateChanged.trigger(["size"])
+    this.onStateChanged.trigger(["size"]);
   }
 
   constructor(components: Components) {
     super(components);
     this.components.add(Clipper.uuid, this);
-    this.setEvents();
-  }
-
-  private setEvents() {
-    this.list.onBeforeDelete.add(({ value: plane }) => {
-      if (!plane.world.renderer) {
-        throw new Error("Renderer not found for this plane's world!");
-      }
-      plane.world.renderer.setPlane(false, plane.three);
-      plane.dispose();
-      this.updateMaterialsAndPlanes();
-
-      this.onAfterDelete.trigger(plane);
-    });
   }
 
   /** {@link Disposable.dispose} */
@@ -278,15 +263,15 @@ export class Clipper
    * found under the cursor will be deleted.
    */
   async delete(world: World, planeId?: string) {
-    if (!planeId) {
-      const plane = await this.pickPlane(world);
-      if (!plane) return;
-      planeId = this.list.getKey(plane);
+    let plane: SimplePlane | undefined;
+
+    if (planeId) {
+      plane = this.list.get(planeId);
+    } else {
+      plane = await this.pickPlane(world);
     }
-    if (!planeId) {
-      return;
-    }
-    this.list.delete(planeId);
+
+    plane?.dispose();
   }
 
   /**
@@ -313,20 +298,6 @@ export class Clipper
     this.isSetup = true;
     this.onSetup.trigger();
   }
-
-  // private deletePlane(plane: SimplePlane) {
-  //   const index = this.list.indexOf(plane);
-  //   if (index !== -1) {
-  //     this.list.splice(index, 1);
-  //     if (!plane.world.renderer) {
-  //       throw new Error("Renderer not found for this plane's world!");
-  //     }
-  //     plane.world.renderer.setPlane(false, plane.three);
-  //     plane.dispose();
-  //     this.updateMaterialsAndPlanes();
-  //     this.onAfterDelete.trigger(plane);
-  //   }
-  // }
 
   private pickPlane(world: World): SimplePlane | undefined {
     const casters = this.components.get(Raycasters);
@@ -408,10 +379,24 @@ export class Clipper
       normal,
       this._material,
     );
+    const id = UUID.create();
+
     plane.autoScale = this.autoScalePlanes;
+
     plane.onDraggingStarted.add(() => this.onBeforeDrag.trigger(plane));
     plane.onDraggingEnded.add(() => this.onAfterDrag.trigger(plane));
-    const id = UUID.create();
+
+    plane.onDisposed.add(() => {
+      if (!plane.world.renderer) {
+        throw new Error("Renderer not found for this plane's world!");
+      }
+      plane.world.renderer.setPlane(false, plane.three);
+      this.updateMaterialsAndPlanes();
+
+      this.list.delete(id);
+      this.onAfterDelete.trigger(plane);
+    });
+
     this.list.set(id, plane);
     this.onAfterCreate.trigger(plane);
     return id;
@@ -439,5 +424,4 @@ export class Clipper
       }
     }
   }
-
 }
